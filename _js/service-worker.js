@@ -13,6 +13,12 @@ export function installServiceWorker() {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 
+  // Notifications were removed; drop subscriptions left on readers' devices.
+  navigator.serviceWorker.ready
+    .then((registration) => registration.pushManager?.getSubscription())
+    .then((subscription) => subscription?.unsubscribe())
+    .catch(() => {});
+
   if (!isStandalone()) return;
 
   navigator.serviceWorker.addEventListener('message', (event) => {

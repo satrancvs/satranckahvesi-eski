@@ -6,8 +6,7 @@ sitemap: false
 // Service worker. Four caches:
 //  - VISITED (fixed name, survives updates): pages the reader opened, fetched network-first
 //    (a stored copy is shown if the network takes over 1.5 s) and kept for offline reading, plus
-//    other /assets/ files, served from the cache and refreshed in the background. Also receives the post (and its images) of every push
-//    notification when it arrives. Trimmed to the most recent MAX_VISITED entries.
+//    other /assets/ files, served from the cache and refreshed in the background. Trimmed to the most recent MAX_VISITED entries.
 //  - OFFLINE (fixed name): the pages listed in sitemap.xml and the images they use, stored
 //    when the page asks for it ({type: 'sync-offline'}; it does so only inside the installed
 //    app). Of the posts only the newest {{ offline_posts }} are kept; everything else in the
@@ -20,8 +19,6 @@ sitemap: false
 //    scripts, fonts and icons, stored at install so the installed app opens offline right
 //    after an update. The previous SHELL is deleted when the new one activates.
 // Everything else (analytics, other embeds) goes straight to the network.
-// Push messages ({title, body, url}, sent by scripts/send-push.mjs) are shown as
-// notifications; tapping one opens its page.
 
 const VERSION = '{{ site.time | date: "%s" }}';
 const VISITED = 'satranckahvesi-visited';
@@ -37,7 +34,6 @@ const LATEST_POSTS = [
 ];
 const OFFLINE_URL = '{{ "/offline/" | relative_url }}';
 const ASSETS = '{{ "/assets/" | relative_url }}';
-const ICON = '{{ "/assets/img/icon-192.png" | relative_url }}';
 const SITEMAP = '{{ "/sitemap.xml" | relative_url }}';
 // Files other sites serve to the boards. Keep in sync with _includes/head.html and
 // scripts.html (ChessPublica) and with the pieceTheme inside ChessPublica.all.min.js.
@@ -228,49 +224,4 @@ self.addEventListener('fetch', (event) => {
   } else if (url.pathname.startsWith(ASSETS)) {
     event.respondWith(staleWhileRevalidate(request));
   }
-});
-
-// Stores the page a notification points to, and its images, so the post can be read
-// offline without the app having been opened. Goes into VISITED, which is trimmed.
-async function cachePostFromNotification(url) {
-  const target = new URL(url || '/', self.location.origin);
-  if (target.origin !== self.location.origin || !target.pathname.startsWith(POSTS)) return;
-  const response = await fetch(target.pathname, { cache: 'no-cache' });
-  if (!response.ok) return;
-  await store(target.pathname, response);
-  const images = [...new Set((await response.text()).match(IMAGES) ?? [])];
-  await Promise.allSettled(images.map(async (image) => store(image, await fetch(image))));
-}
-
-self.addEventListener('push', (event) => {
-  let message = {};
-  try {
-    message = event.data ? event.data.json() : {};
-  } catch {
-    message = {};
-  }
-  event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(message.title || 'Satranç Kahvesi', {
-        body: message.body || '',
-        icon: ICON,
-        tag: message.url,
-        data: { url: message.url }
-      }),
-      // A failed download must never get in the way of the notification.
-      cachePostFromNotification(message.url).catch(() => {})
-    ])
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const target = new URL(event.notification.data?.url || '/', self.location.origin);
-  const url = target.origin === self.location.origin ? target.href : self.location.origin + '/';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const open = windows.find((client) => client.url === url && 'focus' in client);
-      return open ? open.focus() : self.clients.openWindow(url);
-    })
-  );
 });
